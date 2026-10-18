@@ -154,6 +154,14 @@ details ol,details ul{margin:0;padding-left:1.2em;display:flex;flex-direction:co
       <input type="range" id="pos" min="5" max="95" step="1">
     </div>
     <div class="field">
+      <label for="yTop">Erkennung ab oben (Bildhöhe)</label><output id="yTopOut">0 %</output>
+      <input type="range" id="yTop" min="0" max="90" step="1">
+    </div>
+    <div class="field">
+      <label for="yBot">Erkennung bis unten (Bildhöhe)</label><output id="yBotOut">100 %</output>
+      <input type="range" id="yBot" min="10" max="100" step="1">
+    </div>
+    <div class="field">
       <label for="sens">Auslöseschwelle (kleiner = empfindlicher)</label><output id="sensOut">12 %</output>
       <input type="range" id="sens" min="5" max="40" step="1">
     </div>
@@ -207,6 +215,7 @@ details ol,details ul{margin:0;padding-left:1.2em;display:flex;flex-direction:co
       <ol>
         <li>Handy quer zur Bahn auf Stativ oder Kegel stellen, etwa 3 bis 5 m seitlich, Höhe Hüfte bis Brust, Querformat. Kamera ruhig und fest stehen lassen.</li>
         <li>Einen Kegel oder Stab auf die Linie stellen. Den Regler „Torposition“ so verschieben, dass das Band genau über dem Kegel liegt.</li>
+        <li>Mit „Erkennung ab oben“ und „bis unten“ den Bereich einengen, bis nur die Hüfte im hellen Band liegt. Der abgedunkelte Bereich wird nicht ausgewertet, Beine und Arme außerhalb lösen dann nicht aus. Nach jeder Änderung lernt das Handy den Hintergrund neu, dabei nicht durchs Tor laufen.</li>
         <li>Im Zielbild darf hinter der Bahn nichts laufen und die Sonne nicht direkt ins Objektiv scheinen.</li>
         <li>Synchronisieren: beide Handys dicht nebeneinander, gleiche Ausrichtung, auf beiden „Synchronisieren“ tippen. Nach dem Lernen (etwa eine Sekunde) beide Objektive gemeinsam abdecken und die Karte gerade vom Handy weg abziehen. Beide Handys piepen. Dann erst zu Start und Ziel tragen.</li>
         <li>Auf beiden Handys „Messung scharf“ tippen und einen Moment stillhalten, bis „Scharf“ steht. Danach laufen. Nach jedem Lauf rearmieren die Handys selbst.</li>
@@ -348,11 +357,14 @@ function parseList(text) {
     role: store.get('role', 'S') === 'Z' ? 'Z' : 'S',
     pos: clamp(+store.get('pos', 50) || 50, 5, 95),
     sens: clamp(+store.get('sens', 12) || 12, 5, 40),
+    top: clamp(+store.get('top', 0) || 0, 0, 90),
+    bot: clamp(+store.get('bot', 100) || 100, 10, 100),
     runs: (store.get('runs', []) || []).filter(function (x) { return typeof x === 'number' && isFinite(x); }),
     tRef: null, mode: 'idle', stream: null, running: false,
     fpsT: [], lastT: 0, useCapture: null, hasRvfc: typeof vid.requestVideoFrameCallback === 'function',
     wake: null, clearArm: false
   };
+  if (S.bot - S.top < 5) { S.top = 0; S.bot = 100; }
   var det = createDetector(SH, { trigger: S.sens / 100 });
   var sdet = createStepDetector();
   var hist = new Float32Array(240), hi = 0;
@@ -468,14 +480,20 @@ function parseList(text) {
     var col = st === 'armed' ? colors['--ok'] : st === 'learning' ? colors['--warn'] : (st === 'locked' || st === 'done') ? colors['--crit'] : colors['--accent'];
     var vw = vid.videoWidth || 1280;
     var bw = Math.max(3 * dpr, Math.max(4, Math.round(vw * 0.005)) / vw * w);
-    var x = S.pos / 100 * w;
-    ctx.globalAlpha = 0.35; ctx.fillStyle = col; ctx.fillRect(x - bw / 2, 0, bw, h);
-    ctx.globalAlpha = 1; ctx.fillStyle = col; ctx.fillRect(x - 1 * dpr, 0, 2 * dpr, h);
+    var x = S.pos / 100 * w, y0 = S.top / 100 * h, y1 = S.bot / 100 * h;
+    ctx.globalAlpha = 0.55; ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, y0); ctx.fillRect(0, y1, w, h - y1);
+    ctx.globalAlpha = 0.35; ctx.fillStyle = col; ctx.fillRect(x - bw / 2, y0, bw, y1 - y0);
+    ctx.globalAlpha = 1; ctx.fillRect(x - 1 * dpr, y0, 2 * dpr, y1 - y0);
+    ctx.strokeStyle = col; ctx.lineWidth = 1 * dpr; ctx.setLineDash([6 * dpr, 5 * dpr]);
+    if (S.top > 0) { ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(w, y0); ctx.stroke(); }
+    if (S.bot < 100) { ctx.beginPath(); ctx.moveTo(0, y1); ctx.lineTo(w, y1); ctx.stroke(); }
+    ctx.setLineDash([]);
     ctx.font = '700 ' + Math.round(14 * dpr) + 'px ' + getComputedStyle(document.body).getPropertyValue('--display');
     ctx.textBaseline = 'top';
     var label = S.role === 'S' ? 'START' : 'ZIEL';
     var tw = ctx.measureText(label).width, lx = x + 8 * dpr + tw > w ? x - 8 * dpr - tw : x + 8 * dpr;
-    ctx.fillText(label, lx, 6 * dpr);
+    ctx.fillText(label, lx, y0 + 6 * dpr);
   }
   function drawSpark() {
     var dpr = sizeCanvas(spark), ctx = spark.getContext('2d'), w = spark.width, h = spark.height;
@@ -522,7 +540,9 @@ function parseList(text) {
     S.lastT = t;
     var sw = Math.max(4, Math.round(vw * 0.005));
     var sx = clamp(Math.round(S.pos / 100 * vw - sw / 2), 0, vw - sw);
-    sctx.drawImage(vid, sx, 0, sw, vh, 0, 0, SW, SH);
+    var sy = clamp(Math.round(S.top / 100 * vh), 0, vh - 8);
+    var sh = clamp(Math.round((S.bot - S.top) / 100 * vh), 8, vh - sy);
+    sctx.drawImage(vid, sx, sy, sw, sh, 0, 0, SW, SH);
     var px = sctx.getImageData(0, 0, SW, SH).data, sum = 0;
     for (var y = 0; y < SH; y++) {
       var s = 0;
@@ -623,6 +643,20 @@ function parseList(text) {
     S.sens = +this.value; $('sensOut').textContent = S.sens + ' %'; store.set('sens', S.sens);
     det.cfg.trigger = S.sens / 100;
   });
+  function bandUI() {
+    $('yTop').value = S.top; $('yBot').value = S.bot;
+    $('yTopOut').textContent = S.top + ' %'; $('yBotOut').textContent = S.bot + ' %';
+  }
+  bandUI();
+  function bandChange(which) {
+    S.top = +$('yTop').value; S.bot = +$('yBot').value;
+    if (S.bot - S.top < 5) { if (which === 'top') S.top = S.bot - 5; else S.bot = S.top + 5; }
+    store.set('top', S.top); store.set('bot', S.bot); bandUI();
+    if (S.running && S.mode !== 'sync') det.arm(S.lastT);
+    drawOverlay();
+  }
+  $('yTop').addEventListener('input', function () { bandChange('top'); });
+  $('yBot').addEventListener('input', function () { bandChange('bot'); });
   $('btnCopy').addEventListener('click', function () {
     var ta = $('mine'), msg = $('copyMsg');
     if (!ta.value) { msg.textContent = 'Noch nichts zu kopieren.'; return; }
