@@ -684,6 +684,459 @@ function parseList(text) {
   renderAll(); drawOverlay(); drawSpark();
 })();
 </script>
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frames zu Sekunden</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #15171a;
+    --muted: #6a7280;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d9dde3;
+    --error: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #1a1d23;
+      --text: #eceef2;
+      --muted: #9aa3b2;
+      --accent: #5b8cff;
+      --accent-text: #0b0d12;
+      --border: #2c313a;
+      --error: #ff6b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  h1 { font-size: 1.3rem; margin: 8px 0 0; }
+  .hint { color: var(--muted); font-size: 0.9rem; margin: 0; line-height: 1.4; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .label {
+    display: block;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* Dateiauswahl */
+  .file-wrap { position: relative; }
+  .file-wrap input[type="file"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 56px;
+    border-radius: 14px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 0 16px;
+  }
+  .file-name {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    word-break: break-all;
+  }
+
+  /* fps-Auswahl */
+  .seg-wrap { position: relative; }
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .seg input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .seg label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1.05rem;
+    cursor: pointer;
+    background: var(--card);
+    user-select: none;
+  }
+  .seg input:checked + label {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+  .seg input:focus-visible + label {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Ergebnis */
+  .result-value {
+    font-size: 2.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    word-break: break-word;
+  }
+  .formula { margin-top: 8px; color: var(--muted); font-size: 0.95rem; }
+  .details {
+    margin: 14px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    font-size: 0.9rem;
+  }
+  .details dt { color: var(--muted); }
+  .details dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; word-break: break-all; }
+  .error { color: var(--error); font-size: 0.95rem; margin-top: 10px; line-height: 1.4; }
+  .busy { color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Frames zu Sekunden</h1>
+  <p class="hint">Zählt die Frames einer MP4-Datei und teilt sie durch die gewählte Bildrate. Die Datei bleibt auf dem Gerät und wird nicht hochgeladen.</p>
+
+  <section class="card">
+    <span class="label">1 · Video</span>
+    <div class="file-wrap">
+      <div class="btn" aria-hidden="true">MP4-Datei auswählen</div>
+      <input type="file" id="file" accept="video/mp4,video/*" aria-label="MP4-Datei auswählen">
+    </div>
+    <div class="file-name" id="fileName">Noch keine Datei gewählt</div>
+  </section>
+
+  <section class="card">
+    <span class="label">2 · Bildrate (fps)</span>
+    <div class="seg-wrap">
+      <fieldset class="seg" aria-label="Bildrate">
+        <input type="radio" name="fps" id="fps240" value="240" checked><label for="fps240">240</label>
+        <input type="radio" name="fps" id="fps120" value="120"><label for="fps120">120</label>
+        <input type="radio" name="fps" id="fps60" value="60"><label for="fps60">60</label>
+        <input type="radio" name="fps" id="fps30" value="30"><label for="fps30">30</label>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="card" aria-live="polite">
+    <span class="label">Ergebnis</span>
+    <div class="result-value" id="result">–</div>
+    <div class="formula" id="formula">Wähle eine Datei, um die Frames zu zählen.</div>
+    <div class="error" id="error" hidden></div>
+    <dl class="details" id="details" hidden>
+      <dt>Frames</dt><dd id="dFrames"></dd>
+      <dt>Dateigröße</dt><dd id="dSize"></dd>
+      <dt>Laufzeit laut Datei</dt><dd id="dDuration"></dd>
+    </dl>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+// ---- Parser ----
+// Liest nur die Struktur der MP4-Datei (Boxen/Atome). Die Videodaten (mdat)
+// werden übersprungen, deshalb geht es auch bei mehreren GB schnell.
+
+function fourcc(dv, p) {
+  return String.fromCharCode(dv.getUint8(p), dv.getUint8(p + 1), dv.getUint8(p + 2), dv.getUint8(p + 3));
+}
+function u64(dv, p) {
+  return dv.getUint32(p) * 4294967296 + dv.getUint32(p + 4);
+}
+
+// Iteriert über Boxen im Bereich [start, end) eines DataViews.
+function* boxes(dv, start, end) {
+  let p = start;
+  while (p + 8 <= end) {
+    let size = dv.getUint32(p);
+    const type = fourcc(dv, p + 4);
+    let hs = 8;
+    if (size === 1) {
+      if (p + 16 > end) break;
+      size = u64(dv, p + 8);
+      hs = 16;
+    } else if (size === 0) {
+      size = end - p;
+    }
+    if (size < hs || p + size > end) break;
+    yield { type: type, start: p, body: p + hs, end: p + size };
+    p += size;
+  }
+}
+
+function child(dv, box, type) {
+  for (const b of boxes(dv, box.body, box.end)) {
+    if (b.type === type) return b;
+  }
+  return null;
+}
+
+async function readBytes(file, start, end) {
+  const buf = await file.slice(start, end).arrayBuffer();
+  return new DataView(buf);
+}
+
+// Liest nur den Kopf einer Top-Level-Box direkt aus der Datei.
+async function readHeader(file, offset, total) {
+  if (offset + 8 > total) return null;
+  const dv = await readBytes(file, offset, Math.min(offset + 16, total));
+  if (dv.byteLength < 8) return null;
+  let size = dv.getUint32(0);
+  const type = fourcc(dv, 4);
+  let hs = 8;
+  if (size === 1) {
+    if (dv.byteLength < 16) return null;
+    size = u64(dv, 8);
+    hs = 16;
+  } else if (size === 0) {
+    size = total - offset;
+  }
+  if (size < hs) return null;
+  return { type: type, start: offset, size: size, headerSize: hs };
+}
+
+// moov-Box auswerten: alle Tracks mit Handler, Timescale, Dauer und Sample-Anzahl.
+function parseMoov(dv) {
+  const result = { tracks: [], fragmented: false };
+  const moov = boxes(dv, 0, dv.byteLength).next().value;
+  if (!moov) return result;
+
+  for (const b of boxes(dv, moov.body, moov.end)) {
+    if (b.type === 'mvex') result.fragmented = true;
+    if (b.type !== 'trak') continue;
+
+    const tkhd = child(dv, b, 'tkhd');
+    const mdia = child(dv, b, 'mdia');
+    if (!tkhd || !mdia) continue;
+
+    const tkhdVer = dv.getUint8(tkhd.body);
+    const id = dv.getUint32(tkhd.body + (tkhdVer === 1 ? 20 : 12));
+
+    const hdlr = child(dv, mdia, 'hdlr');
+    const handler = hdlr ? fourcc(dv, hdlr.body + 8) : '';
+
+    let timescale = 0, duration = 0;
+    const mdhd = child(dv, mdia, 'mdhd');
+    if (mdhd) {
+      if (dv.getUint8(mdhd.body) === 1) {
+        timescale = dv.getUint32(mdhd.body + 20);
+        duration = u64(dv, mdhd.body + 24);
+      } else {
+        timescale = dv.getUint32(mdhd.body + 12);
+        duration = dv.getUint32(mdhd.body + 16);
+      }
+    }
+
+    let samples = 0, sttsSamples = 0;
+    const minf = child(dv, mdia, 'minf');
+    const stbl = minf ? child(dv, minf, 'stbl') : null;
+    if (stbl) {
+      const stsz = child(dv, stbl, 'stsz') || child(dv, stbl, 'stz2');
+      if (stsz) samples = dv.getUint32(stsz.body + 8);
+      const stts = child(dv, stbl, 'stts');
+      if (stts) {
+        const n = dv.getUint32(stts.body + 4);
+        let p = stts.body + 8;
+        for (let i = 0; i < n && p + 8 <= stts.end; i++, p += 8) {
+          sttsSamples += dv.getUint32(p);
+        }
+      }
+    }
+    result.tracks.push({
+      id: id, handler: handler, timescale: timescale,
+      duration: duration, samples: samples || sttsSamples
+    });
+  }
+  return result;
+}
+
+// moof-Box (fragmentierte MP4) auswerten: Samples pro Track-ID aufsummieren.
+function parseMoof(dv, counts) {
+  const moof = boxes(dv, 0, dv.byteLength).next().value;
+  if (!moof) return;
+  for (const traf of boxes(dv, moof.body, moof.end)) {
+    if (traf.type !== 'traf') continue;
+    let id = null, n = 0;
+    for (const c of boxes(dv, traf.body, traf.end)) {
+      if (c.type === 'tfhd') id = dv.getUint32(c.body + 4);
+      else if (c.type === 'trun') n += dv.getUint32(c.body + 4);
+    }
+    if (id !== null) counts[id] = (counts[id] || 0) + n;
+  }
+}
+
+function bestVideoTrack(info) {
+  let best = null;
+  for (const t of info.tracks) {
+    if (t.handler !== 'vide') continue;
+    if (!best || t.samples > best.samples) best = t;
+  }
+  return best;
+}
+
+// Hauptfunktion: liefert { frames, durationSec } oder wirft einen Fehler.
+async function countFrames(file) {
+  const total = file.size;
+  const MAX_BOX = 512 * 1024 * 1024;
+  let offset = 0;
+  let info = null;
+  const frag = {};
+  let sawFragments = false;
+
+  while (offset + 8 <= total) {
+    const h = await readHeader(file, offset, total);
+    if (!h) break;
+
+    if (h.type === 'moov') {
+      if (h.size > MAX_BOX) throw new Error('Die Datei hat einen ungewöhnlich großen Header.');
+      info = parseMoov(await readBytes(file, h.start, h.start + h.size));
+      const v = bestVideoTrack(info);
+      // Normale (nicht fragmentierte) Datei: fertig, ohne den Rest zu durchlaufen.
+      if (v && v.samples > 0 && !info.fragmented) break;
+    } else if (h.type === 'moof') {
+      if (h.size > MAX_BOX) throw new Error('Die Datei hat einen ungewöhnlich großen Fragment-Header.');
+      sawFragments = true;
+      parseMoof(await readBytes(file, h.start, h.start + h.size), frag);
+    }
+    offset = h.start + h.size;
+  }
+
+  if (!info) {
+    throw new Error('Keine gültige MP4-Datei: Der Index (moov) wurde nicht gefunden. Möglicherweise ist die Datei unvollständig.');
+  }
+  const v = bestVideoTrack(info);
+  if (!v) throw new Error('In der Datei wurde keine Videospur gefunden.');
+
+  const frames = v.samples + (sawFragments ? (frag[v.id] || 0) : 0);
+  if (frames <= 0) throw new Error('In der Videospur wurden keine Frames gefunden.');
+
+  const durationSec = v.timescale > 0 && v.duration > 0 ? v.duration / v.timescale : null;
+  return { frames: frames, durationSec: durationSec };
+}
+
+// ---- UI ----
+(function () {
+  if (typeof document === 'undefined') return;
+  const $ = function (id) { return document.getElementById(id); };
+  const fileInput = $('file');
+  const fileName = $('fileName');
+  const resultEl = $('result');
+  const formulaEl = $('formula');
+  const errorEl = $('error');
+  const detailsEl = $('details');
+  let frames = null;
+
+  function fmt(n, digits) {
+    return n.toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  function fmtSize(bytes) {
+    if (bytes >= 1073741824) return fmt(bytes / 1073741824, 2) + ' GB';
+    if (bytes >= 1048576) return fmt(bytes / 1048576, 1) + ' MB';
+    return fmt(bytes / 1024, 0) + ' KB';
+  }
+  function currentFps() {
+    return Number(document.querySelector('input[name="fps"]:checked').value);
+  }
+
+  function render() {
+    if (frames === null) return;
+    const fps = currentFps();
+    resultEl.textContent = fmt(frames / fps, 3) + ' s';
+    formulaEl.textContent = fmt(frames, 0) + ' Frames ÷ ' + fps + ' fps';
+  }
+
+  function showError(msg) {
+    frames = null;
+    resultEl.textContent = '–';
+    formulaEl.textContent = '';
+    detailsEl.hidden = true;
+    errorEl.textContent = msg;
+    errorEl.hidden = false;
+  }
+
+  document.querySelectorAll('input[name="fps"]').forEach(function (r) {
+    r.addEventListener('change', render);
+  });
+
+  fileInput.addEventListener('change', async function () {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+
+    fileName.textContent = file.name || 'Ausgewählte Datei';
+    errorEl.hidden = true;
+    detailsEl.hidden = true;
+    frames = null;
+    resultEl.textContent = '…';
+    formulaEl.textContent = 'Zähle Frames …';
+
+    try {
+      const r = await countFrames(file);
+      frames = r.frames;
+      $('dFrames').textContent = fmt(r.frames, 0);
+      $('dSize').textContent = fmtSize(file.size);
+      $('dDuration').textContent = r.durationSec !== null ? fmt(r.durationSec, 3) + ' s' : '–';
+      detailsEl.hidden = false;
+      render();
+    } catch (err) {
+      showError(err && err.message ? err.message : 'Die Datei konnte nicht gelesen werden.');
+    }
+  });
+})();
+</script>
+
+
+
+
 </body>
 </html>
 
