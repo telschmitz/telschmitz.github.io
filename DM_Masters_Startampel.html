@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="de"><head></head><body>Auf Android-Geräten führt der Web-Audio-Kompressor in Chrome oft zum Stummschalten der Audio-Engine.
+Hier ist der funktionierende Code auf Basis der ersten Version – erweitert um eine saubere Lautstärkeregler-Steuerung über ein einfaches GainNode, ohne das Audio-System auf Android zu überlasten:
+
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DM Masters Sprint Start-Generator &amp; Timer</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #ffffff;
+            --accent-color: #00e676;
+            --warning-color: #ffab00;
+            --ready-color: #ff3d00;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 15px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-color);
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-top: 4px;
+        }
+
+        .status-box {
+            width: 100%;
+            max-width: 500px;
+            height: 220px;
+            border-radius: 20px;
+            background-color: var(--card-bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: background-color 0.3s ease, border 0.3s ease;
+            border: 3px solid #333;
+            text-align: center;
+            padding: 15px;
+            cursor: pointer;
+        }
+
+        .status-text {
+            font-size: 2.2rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .timer-display {
+            font-size: 3.5rem;
+            font-weight: 800;
+            font-family: "Courier New", Courier, monospace;
+            margin-top: 10px;
+            color: #fff;
+        }
+
+        .controls {
+            width: 100%;
+            max-width: 500px;
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.1s ease, filter 0.2s ease;
+            margin-bottom: 10px;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-start {
+            background-color: var(--accent-color);
+            color: #000;
+        }
+
+        .btn-stop {
+            background-color: var(--ready-color);
+            color: #fff;
+        }
+
+        .btn-download {
+            background-color: #333;
+            color: #fff;
+            padding: 10px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            border: 1px solid #555;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 15px;
+            border-top: 1px solid #333;
+            padding-top: 15px;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.8rem;
+            color: #bbb;
+        }
+
+        .setting-item.full-width {
+            grid-column: span 2;
+        }
+
+        .setting-item label {
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .setting-item input, .setting-item select {
+            background: #121212;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .setting-item input[type="range"] {
+            padding: 0;
+            height: 24px;
+            accent-color: var(--accent-color);
+            cursor: pointer;
+        }
+
+        .history {
+            width: 100%;
+            max-width: 500px;
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 15px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+        }
+
+        .history h3 {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .history-list {
+            list-style: none;
+        }
+
+        .history-list li {
+            padding: 4px 0;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+        }
+
+        .state-idle { border-color: #444; }
+        .state-marche { border-color: var(--warning-color); background-color: #2a2100; }
+        .state-marche .status-text { color: var(--warning-color); }
+        .state-ready { border-color: var(--ready-color); background-color: #2a0800; }
+        .state-ready .status-text { color: var(--ready-color); }
+        .state-running { border-color: var(--accent-color); background-color: #002a0f; }
+        .state-running .status-text { color: var(--accent-color); }
+    </style>
+
+
+
+    <header>
+        <h1>DM Masters Startampel</h1>
+        <div class="subtitle">Offline Starter &amp; Reaktions-Timer</div>
+    </header>
+
+    <div id="statusBox" class="status-box state-idle" onclick="handleScreenTap()">
+        <div id="statusText" class="status-text">BEREIT</div>
+        <div id="timerDisplay" class="timer-display">00.000</div>
+    </div>
+
+    <div class="controls">
+        <button id="mainBtn" class="btn btn-start" onclick="toggleSequence()">Start-Sequenz</button>
+
+        <div class="settings-grid">
+            <div class="setting-item full-width">
+                <label for="volumeControl"><span>Lautstärke Boost:</span> <strong id="volVal" style="color: var(--accent-color);">150%</strong></label>
+                <input type="range" id="volumeControl" value="150" min="50" max="250" step="10" oninput="document.getElementById('volVal').innerText = this.value + '%'">
+            </div>
+
+            <div class="setting-item">
+                <label for="setDelayMin">"Fertig" Min (Sek.):</label>
+                <input type="number" id="setDelayMin" value="1.5" step="0.1" min="1.0" max="3.0">
+            </div>
+
+            <div class="setting-item">
+                <label for="setDelayMax">"Fertig" Max (Sek.):</label>
+                <input type="number" id="setDelayMax" value="2.5" step="0.1" min="1.5" max="4.0">
+            </div>
+
+            <div class="setting-item">
+                <label for="marksDelay">Anlaufzeit "Plätze" (Sek.):</label>
+                <input type="number" id="marksDelay" value="8" step="1" min="3" max="15">
+            </div>
+
+            <div class="setting-item">
+                <label for="commandLang">Sprache Kommandos:</label>
+                <select id="commandLang">
+                    <option value="de">Deutsch (Auf die Plätze / Fertig)</option>
+                    <option value="en">English (On your marks / Set)</option>
+                </select>
+            </div>
+        </div>
+
+        <button class="btn btn-download" onclick="downloadSelf()">HTML-Datei herunterladen</button>
+    </div>
+
+    <div class="history">
+        <h3>Zeiten Logbuch</h3>
+        <ul id="historyList" class="history-list">
+            <li><span>Keine Läufe aufgezeichnet</span><span>--.---</span></li>
+        </ul>
+    </div>
+
+    <script>
+        let state = 'IDLE';
+        let startTime = 0;
+        let timerInterval = null;
+        let sequenceTimeouts = [];
+        let history = [];
+
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playGunshot() {
+            initAudio();
+
+            const now = audioCtx.currentTime;
+            const volFactor = (parseFloat(document.getElementById('volumeControl').value) || 150) / 100;
+
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(volFactor, now);
+            masterGain.connect(audioCtx.destination);
+
+            // 1. Noise Buffer (Explosion Knall)
+            const bufferSize = audioCtx.sampleRate * 0.4; 
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            const noiseFilter = audioCtx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.setValueAtTime(1600, now);
+            noiseFilter.frequency.exponentialRampToValueAtTime(70, now + 0.35);
+
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(1.8, now);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(masterGain);
+
+            // 2. Low Frequency Punch (Druckwelle)
+            const osc = audioCtx.createOscillator();
+            const oscGain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+
+            oscGain.gain.setValueAtTime(1.8, now);
+            oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+            osc.connect(oscGain);
+            oscGain.connect(masterGain);
+
+            noise.start(now);
+            osc.start(now);
+        }
+
+        function speak(text, langCode) {
+            return new Promise((resolve) => {
+                if (!('speechSynthesis' in window)) {
+                    resolve();
+                    return;
+                }
+                window.speechSynthesis.cancel();
+                const msg = new SpeechSynthesisUtterance(text);
+                msg.lang = langCode === 'de' ? 'de-DE' : 'en-US';
+                msg.rate = 0.9; 
+                msg.pitch = 0.95;
+                msg.volume = 1.0;
+                msg.onend = resolve;
+                msg.onerror = resolve;
+                window.speechSynthesis.speak(msg);
+            });
+        }
+
+        function toggleSequence() {
+            initAudio();
+            if (state === 'IDLE') {
+                startSequence();
+            } else {
+                resetToIdle();
+            }
+        }
+
+        function handleScreenTap() {
+            if (state === 'RUNNING') {
+                stopTimer();
+            }
+        }
+
+        function startSequence() {
+            clearAllTimeouts();
+            const lang = document.getElementById('commandLang').value;
+            const marksDelaySec = parseFloat(document.getElementById('marksDelay').value) || 8;
+            const minDelay = parseFloat(document.getElementById('setDelayMin').value) || 1.5;
+            const maxDelay = parseFloat(document.getElementById('setDelayMax').value) || 2.5;
+
+            const randomHoldTime = (Math.random() * (maxDelay - minDelay) + minDelay) * 1000;
+
+            const textMarks = lang === 'de' ? 'Auf die Plätze' : 'On your marks';
+            const textReady = lang === 'de' ? 'Fertig' : 'Set';
+
+            setUIState('MARCHE', textMarks, '00.000');
+            speak(textMarks, lang);
+
+            let t1 = setTimeout(() => {
+                setUIState('READY', textReady, '00.000');
+                speak(textReady, lang);
+
+                let t2 = setTimeout(() => {
+                    playGunshot();
+                    startTimer();
+                }, randomHoldTime);
+
+                sequenceTimeouts.push(t2);
+            }, marksDelaySec * 1000);
+
+            sequenceTimeouts.push(t1);
+        }
+
+        function startTimer() {
+            setUIState('RUNNING', 'LOS!', '00.000');
+            startTime = performance.now();
+            timerInterval = setInterval(() => {
+                const elapsed = (performance.now() - startTime) / 1000;
+                document.getElementById('timerDisplay').innerText = elapsed.toFixed(3);
+            }, 10);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            const finalTime = ((performance.now() - startTime) / 1000).toFixed(3);
+            document.getElementById('timerDisplay').innerText = finalTime;
+            
+            addHistoryRecord(finalTime);
+            
+            state = 'IDLE';
+            document.getElementById('mainBtn').innerText = 'Start-Sequenz';
+            document.getElementById('mainBtn').className = 'btn btn-start';
+            document.getElementById('statusText').innerText = 'GESTOPPT';
+        }
+
+        function resetToIdle() {
+            clearAllTimeouts();
+            clearInterval(timerInterval);
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            
+            state = 'IDLE';
+            setUIState('IDLE', 'BEREIT', '00.000');
+            document.getElementById('mainBtn').innerText = 'Start-Sequenz';
+            document.getElementById('mainBtn').className = 'btn btn-start';
+        }
+
+        function setUIState(newState, text, timerVal) {
+            state = newState;
+            const box = document.getElementById('statusBox');
+            const statusTxt = document.getElementById('statusText');
+            const mainBtn = document.getElementById('mainBtn');
+
+            box.className = 'status-box state-' + newState.toLowerCase();
+            statusTxt.innerText = text;
+
+            if (newState !== 'RUNNING' && timerVal) {
+                document.getElementById('timerDisplay').innerText = timerVal;
+            }
+
+            if (newState !== 'IDLE') {
+                mainBtn.innerText = 'Abbrechen';
+                mainBtn.className = 'btn btn-stop';
+            }
+        }
+
+        function clearAllTimeouts() {
+            sequenceTimeouts.forEach(t => clearTimeout(t));
+            sequenceTimeouts = [];
+        }
+
+        function addHistoryRecord(timeSec) {
+            const list = document.getElementById('historyList');
+            if (history.length === 0) list.innerHTML = '';
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            history.unshift({ time: timeSec, date: timeStr });
+            if (history.length > 10) history.pop();
+
+            list.innerHTML = history.map((item, idx) => `
+                <li>
+                    <span>#${history.length - idx} (${item.date})</span>
+                    <strong>${item.time} s</strong>
+                </li>
+            `).join('');
+        }
+
+        function downloadSelf() {
+            const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'DM_Masters_Startampel.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+
+
+
+</body></html>
